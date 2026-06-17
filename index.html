@@ -197,6 +197,7 @@
 
     .toolbar {
       display: flex; gap: 0.4rem; margin-bottom: 0.9rem;
+      flex-wrap: wrap;
     }
     .btn-tool {
       flex: 1; padding: 0.5rem;
@@ -209,6 +210,8 @@
       cursor: pointer;
       transition: all 0.2s;
       touch-action: manipulation;
+      min-width: 60px;
+      text-align: center;
     }
     .btn-tool:active { border-color: var(--gold-dim); color: var(--gold); }
 
@@ -514,8 +517,10 @@
     .wallet-bar::-webkit-scrollbar { display: none; }
     .wallet-chip {
       flex-shrink: 0; padding: 0.3rem 0.75rem; border-radius: 20px;
-      border: 1px solid var(--border); background: var(--bg3);
-      color: var(--muted); font-size: 0.7rem; font-family: var(--mono);
+      border: 1px solid var(--border);
+      background: var(--bg3);
+      color: var(--muted);
+      font-size: 0.7rem; font-family: var(--mono);
       cursor: pointer; transition: all 0.2s; white-space: nowrap;
       touch-action: manipulation;
     }
@@ -537,6 +542,16 @@
       transition: all 0.2s;
     }
     .btn-wallet-del:active { color: var(--red); background: rgba(255,79,100,0.1); }
+    .btn-wallet-txn {
+      background: none; border: 1px solid var(--gold-dim);
+      color: var(--gold); font-size: 0.65rem;
+      cursor: pointer; padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      touch-action: manipulation;
+      transition: all 0.2s;
+      font-family: var(--mono);
+    }
+    .btn-wallet-txn:active { background: rgba(200,168,75,0.15); }
     .transfer-form {
       background: var(--panel); border: 1px solid var(--border);
       border-radius: 10px; padding: 0.9rem; margin-bottom: 1rem;
@@ -629,13 +644,6 @@
     }
 
     /* ─── STATUS BAR ─── */
-    .status-bar {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.4rem;
-    }
     #syncStatus {
       font-family: var(--mono);
       font-size: 0.55rem;
@@ -650,7 +658,7 @@
     #syncStatus.loading { color: var(--amber); border-color: rgba(240,163,10,0.3); }
     #syncStatus.error { color: var(--red); border-color: rgba(255,79,100,0.3); }
 
-    /* ─── DELETE CONFIRM OVERLAY ─── */
+    /* ─── CONFIRM OVERLAY ─── */
     .confirm-overlay {
       display: none;
       position: fixed;
@@ -719,6 +727,12 @@
       border: 1px solid rgba(240,163,10,0.3) !important;
     }
     .confirm-box .btn-warning:active { background: rgba(240,163,10,0.3); }
+
+    @media (max-width: 480px) {
+      .toolbar .btn-tool { font-size: 0.6rem; padding: 0.3rem; min-width: 40px; }
+      .wallet-card { flex-wrap: wrap; gap: 0.5rem; }
+      .wallet-card > div:last-child { width: 100%; justify-content: flex-end; }
+    }
   </style>
 
   <!-- Firebase -->
@@ -817,8 +831,10 @@
   </div>
 
   <div class="toolbar">
-    <button class="btn-tool" onclick="downloadCSV()">⬇ EXPORT CSV</button>
-    <button class="btn-tool" onclick="clearAll()">🗑 ล้างข้อมูล</button>
+    <button class="btn-tool" onclick="downloadCSV()">⬇ CSV</button>
+    <button class="btn-tool" onclick="exportJSON()">📦 JSON</button>
+    <button class="btn-tool" onclick="importJSON()">📂 นำเข้า</button>
+    <button class="btn-tool" onclick="clearAll()">🗑 ล้าง</button>
   </div>
 
   <div class="search-wrap">
@@ -1046,7 +1062,7 @@
 
 <script>
   // ============================================================
-  //  CONFIRM SYSTEM (แทน confirm() แบบสวยงาม)
+  //  CONFIRM SYSTEM
   // ============================================================
   let pendingAction = null;
 
@@ -1087,8 +1103,6 @@
   // ============================================================
   //  FIREBASE SYNC
   // ============================================================
-  let isSyncing = false;
-
   function fbPush(key, data) {
     if (!window._fbReady || !window._fb) {
       showToast('⚠️ ไม่มีสัญญาณ Cloud (บันทึกในเครื่อง)');
@@ -1108,6 +1122,9 @@
     el.className = status;
   }
 
+  // ============================================================
+  //  DATA
+  // ============================================================
   let items = [];
   let wallets = [];
   let installments = [];
@@ -1196,6 +1213,19 @@
     renderList();
   }
 
+  // 🔥 ฟังก์ชันเชื่อมโยงไปหน้ารายการตามบัญชี
+  function goToWalletTransactions(walletId) {
+    const homeBtn = document.querySelector('.nav-btn[onclick*="page-home"]');
+    if (homeBtn) {
+      showPage('page-home', homeBtn);
+      walletFilter = walletId;
+      renderWalletFilterBar();
+      renderList();
+      const w = wallets.find(w => w.id === walletId);
+      showToast(`🔍 แสดงธุรกรรมของ ${w ? w.name : ''}`);
+    }
+  }
+
   function renderWalletPage() {
     const grid = document.getElementById('walletSummary');
     if (grid) {
@@ -1211,9 +1241,13 @@
         const bal = getWalletBalance(w.id);
         const txCount = items.filter(i => i.walletId === w.id).length;
         return `<div class="wallet-card">
-          <div><div class="wc-name">👛 ${w.name}</div><div class="wc-meta">${txCount} รายการ · ยอดเริ่ม ${(w.init||0).toLocaleString()} ฿</div></div>
-          <div style="display:flex;align-items:center;gap:0.7rem">
+          <div>
+            <div class="wc-name">👛 ${w.name}</div>
+            <div class="wc-meta">${txCount} รายการ · ยอดเริ่ม ${(w.init||0).toLocaleString()} ฿</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
             <div class="wc-bal" style="color:${bal>=0?'var(--gold)':'var(--red)'}">${bal.toLocaleString()} ฿</div>
+            <button class="btn-wallet-txn" onclick="goToWalletTransactions(${w.id})">💳</button>
             ${wallets.length > 1 ? `<button class="btn-wallet-del" onclick="deleteWallet(${w.id})">✕</button>` : ''}
           </div>
         </div>`;
@@ -1443,11 +1477,82 @@
     showToast('✅ แก้ไขแล้ว');
   }
 
+  // ── EXPORT / IMPORT JSON ──
+  function exportJSON() {
+    if (!items.length && !wallets.length && !installments.length) {
+      return showToast('ไม่มีข้อมูลที่จะส่งออก');
+    }
+    const data = {
+      items: items,
+      wallets: wallets,
+      installments: installments,
+      categories: categories,
+      exportedAt: new Date().toISOString(),
+      version: '2.0'
+    };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `budget_backup_${today}.json`;
+    a.click();
+    showToast('📦 ส่งออก JSON สำเร็จ');
+  }
+
+  function importJSON() {
+    showConfirm('📂', 'นำเข้าข้อมูล JSON?', 'ข้อมูลปัจจุบันจะถูกแทนที่ทั้งหมด (ไม่สามารถกู้คืนได้)', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          try {
+            const data = JSON.parse(event.target.result);
+            if (!data.items || !data.wallets || !data.installments || !data.categories) {
+              showToast('❌ ไฟล์ JSON ไม่ถูกต้อง');
+              return;
+            }
+            items = data.items || [];
+            wallets = data.wallets || [];
+            installments = data.installments || [];
+            categories = data.categories || {
+              income: [...DEFAULT_CATEGORIES.income],
+              expense: [...DEFAULT_CATEGORIES.expense]
+            };
+            save();
+            saveWallets();
+            saveInstallments();
+            saveCategories();
+            renderList();
+            renderLoan();
+            renderInstallment();
+            renderWalletPage();
+            renderCatList();
+            initMonthSelect();
+            updateWalletDropdowns();
+            renderWalletFilterBar();
+            showToast('✅ นำเข้า JSON สำเร็จ');
+          } catch(err) {
+            showToast('❌ ไฟล์ JSON เสียหาย');
+            console.error(err);
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }, 'warning');
+  }
+
+  // ── CSV EXPORT ──
   function downloadCSV() {
     if (!items.length) return showToast('ไม่มีข้อมูล');
-    let csv = 'วันที่,รายการ,หมายเหตุ,หมวดหมู่,ประเภท,จำนวน\n';
+    let csv = 'วันที่,รายการ,หมายเหตุ,หมวดหมู่,ประเภท,จำนวน,บัญชี\n';
     items.forEach(i => {
-      csv += `${i.date},"${i.name}","${i.note||''}","${i.category||''}",${i.type==='income'?'รายรับ':'รายจ่าย'},${i.amount}\n`;
+      const w = wallets.find(w => w.id === i.walletId);
+      csv += `${i.date},"${i.name}","${i.note||''}","${i.category||''}",${i.type==='income'?'รายรับ':'รายจ่าย'},${i.amount},"${w ? w.name : ''}"\n`;
     });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], {type: 'text/csv'}));
@@ -1466,6 +1571,7 @@
     const search = document.getElementById('searchInput').value.toLowerCase();
     let filtered = items.filter(i => 
       (filter === 'all' || i.type === filter) &&
+      (walletFilter === 'all' || i.walletId === walletFilter) &&
       (i.name.toLowerCase().includes(search) || (i.note||'').toLowerCase().includes(search) || (i.category||'').toLowerCase().includes(search))
     );
     let inc = 0, exp = 0;
@@ -1922,7 +2028,6 @@
     updateSyncStatus('loading', '⏳ LOADING...');
 
     const { fbListen } = window._fb;
-
     let isFirstLoad = true;
 
     fbListen('budget/items', val => {
