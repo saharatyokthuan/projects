@@ -737,38 +737,38 @@
 
   <!-- Firebase -->
   <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+    // Import the functions you need from the SDKs
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
 
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyDx5WJPqCB0kgIccaMPdhYHseGWK2MmltM",
-    authDomain: "data-archive-f4a64.firebaseapp.com",
-    projectId: "data-archive-f4a64",
-    storageBucket: "data-archive-f4a64.firebasestorage.app",
-    messagingSenderId: "361749769635",
-    appId: "1:361749769635:web:385d59bc8f5f9977553e16"
-  };
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyDx5WJPqCB0kgIccaMPdhYHseGWK2MmltM",
+      authDomain: "data-archive-f4a64.firebaseapp.com",
+      projectId: "data-archive-f4a64",
+      storageBucket: "data-archive-f4a64.firebasestorage.app",
+      messagingSenderId: "361749769635",
+      appId: "1:361749769635:web:385d59bc8f5f9977553e16"
+    };
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-  
-  function fbSave(path, data) {
-    set(ref(db, path), data).catch(e => console.error('fb save error', e));
-  }
+    // Wrapper functions
+    function fbSave(path, data) {
+      set(ref(db, path), data).catch(e => console.error('fb save error', e));
+    }
+    function fbListen(path, cb) {
+      onValue(ref(db, path), snap => {
+        cb(snap.exists() ? snap.val() : null);
+      });
+    }
 
-  function fbListen(path, cb) {
-    onValue(ref(db, path), snap => {
-      cb(snap.exists() ? snap.val() : null);
-    });
-  }
-
-  window._fb = { db, ref, set, onValue, remove, fbSave, fbListen };
-  window._fbReady = true;
-  window.dispatchEvent(new Event('fbReady'));
+    // Expose to global window
+    window._fb = { db, ref, set, onValue, remove, fbSave, fbListen };
+    window._fbReady = true;
+    window.dispatchEvent(new Event('fbReady'));
   </script>
 </head>
 <body>
@@ -1216,7 +1216,6 @@
     renderList();
   }
 
-  // 🔥 ฟังก์ชันเชื่อมโยงไปหน้ารายการตามบัญชี
   function goToWalletTransactions(walletId) {
     const homeBtn = document.querySelector('.nav-btn[onclick*="page-home"]');
     if (homeBtn) {
@@ -2055,11 +2054,8 @@
       }
     });
 
-    // 🔥 WALLET LISTENER FIXED
     fbListen('budget/wallets', val => {
-      // ถ้าไม่มีข้อมูลใน Firebase หรือเป็น array ว่าง
       if (!val || (Array.isArray(val) && val.length === 0)) {
-        // ถ้าในเครื่องมีบัญชีอยู่แล้ว ให้ใช้ของเดิม
         if (wallets && wallets.length > 0) {
           fbPush('wallets', wallets);
           renderWalletPage();
@@ -2067,7 +2063,6 @@
           renderWalletFilterBar();
           return;
         }
-        // ถ้าในเครื่องก็ไม่มี ใช้ค่าเริ่มต้น
         wallets = [...DEFAULT_WALLETS];
         saveToLocal();
         fbPush('wallets', wallets);
@@ -2076,8 +2071,6 @@
         renderWalletFilterBar();
         return;
       }
-
-      // มีข้อมูลใน Firebase
       let remote = Array.isArray(val) ? val : Object.values(val);
       if (remote.length === 0) {
         if (wallets && wallets.length > 0) {
@@ -2092,7 +2085,6 @@
         renderWalletFilterBar();
         return;
       }
-
       if (JSON.stringify(remote) !== JSON.stringify(wallets)) {
         wallets = remote;
         saveToLocal();
